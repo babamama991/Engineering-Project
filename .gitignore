@@ -18,6 +18,7 @@ build/
 
 # Runtime data
 server/uploads/
+server/logs/
 *.pid
 
 # Database dumps (see the pg_dump backup in the README)

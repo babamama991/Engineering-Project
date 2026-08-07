@@ -9,6 +9,7 @@ import rateLimit from 'express-rate-limit';
 import { config } from './config.js';
 import { pool } from './db.js';
 import { notFound, errorHandler } from './middleware/error.js';
+import { logger, accessStream } from './utils/logger.js';
 import { authenticate, requireManager, requirePasswordSet } from './middleware/auth.js';
 
 import authRoutes from './routes/auth.js';
@@ -29,7 +30,11 @@ app.set('trust proxy', 1);
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(compression());
 app.use(express.json({ limit: '1mb' }));
-app.use(morgan(config.env === 'production' ? 'combined' : 'dev'));
+
+// Every request to access-*.log. In development it also stays on the console in
+// the short 'dev' format, which is the one you actually want while working.
+app.use(morgan('combined', { stream: accessStream }));
+if (config.env !== 'production') app.use(morgan('dev'));
 
 app.use(
   cors({
@@ -92,19 +97,38 @@ app.use(notFound);
 app.use(errorHandler);
 
 const server = app.listen(config.port, config.host, () => {
-  console.log(`SmallVille Engineering API listening on http://${config.host}:${config.port}`);
-  console.log(`Environment: ${config.env} | DB: ${config.db.database}@${config.db.host}`);
+  logger.info(`API listening on http://${config.host}:${config.port}`, {
+    env: config.env,
+    db: `${config.db.database}@${config.db.host}`,
+    logs: config.logDir,
+  });
 });
 
 const shutdown = (signal) => async () => {
-  console.log(`\n${signal} received, shutting down…`);
+  logger.info(`${signal} received, shutting down`);
   server.close(async () => {
     await pool.end();
     process.exit(0);
   });
-  setTimeout(() => process.exit(1), 10_000).unref();
+  setTimeout(() => {
+    logger.warn('Shutdown timed out after 10s, forcing exit');
+    process.exit(1);
+  }, 10_000).unref();
 };
 process.on('SIGTERM', shutdown('SIGTERM'));
 process.on('SIGINT', shutdown('SIGINT'));
+
+// Without these, a crash under a service manager leaves no trace at all — the
+// process simply disappears and restarts. Log first, then let it die: the state
+// after an uncaught exception isn't safe to keep serving from.
+process.on('uncaughtException', (err) => {
+  logger.error(err, { fatal: true, source: 'uncaughtException' });
+  setTimeout(() => process.exit(1), 200);
+});
+process.on('unhandledRejection', (reason) => {
+  logger.error(reason instanceof Error ? reason : new Error(String(reason)), {
+    source: 'unhandledRejection',
+  });
+});
 
 export default app;

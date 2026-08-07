@@ -26,6 +26,9 @@ export const config = {
   uploadDir: path.resolve(process.env.UPLOAD_DIR || './uploads'),
   maxUploadBytes: Number(process.env.MAX_UPLOAD_MB || 8) * 1024 * 1024,
 
+  logDir: path.resolve(process.env.LOG_DIR || './logs'),
+  logKeepDays: Number(process.env.LOG_KEEP_DAYS || 30),
+
   corsOrigins: (process.env.CORS_ORIGINS || '')
     .split(',')
     .map((s) => s.trim())

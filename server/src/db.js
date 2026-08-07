@@ -16,7 +16,10 @@ export const pool = new pg.Pool({
 });
 
 pool.on('error', (err) => {
-  console.error('[db] idle client error', err);
+  // Lazy import: db.js loads before logger.js is ready during startup.
+  import('./utils/logger.js').then(({ logger }) =>
+    logger.error(err, { source: 'pg pool idle client' })
+  );
 });
 
 export const query = (text, params) => pool.query(text, params);

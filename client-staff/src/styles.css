@@ -1,0 +1,671 @@
+﻿/* ===========================================================================
+   SmallVille — staff app
+   Mobile-first. Every interactive element is at least 44px so it can be hit
+   while walking. Logical properties (inline-start/end) throughout so the whole
+   layout mirrors correctly when dir="rtl".
+   =========================================================================== */
+
+/* Brand faces, same files and weights the captive portal uses. */
+@font-face {
+  font-family: "FatFrank Heavy";
+  src: url("/fonts/fatfrank-heavy.otf") format("opentype");
+  font-weight: 900; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "Avenir Book";
+  src: url("/fonts/avenir-book.ttf") format("truetype");
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "Avenir Medium";
+  src: url("/fonts/avenir-medium.ttf") format("truetype");
+  font-weight: 500; font-style: normal; font-display: swap;
+}
+
+:root {
+  /* --- SmallVille brand, copied from the captive portal's theme.css --------- */
+  --sv-red: #eb1d25;
+  --sv-red-dark: #c81118;
+  --sv-gold: #ffd400;
+  --sv-ink: #131316;
+  --sv-white: #ffffff;
+  --sv-gray: #54595f;
+  --sv-gray-light: #7a7a7a;
+  --sv-bg: #f7f6fe;
+
+  /* Avenir and FatFrank carry no Arabic glyphs, so the Arabic faces stay in the
+     stack — the browser falls back per glyph and Arabic still renders properly. */
+  --sv-font-heading: "FatFrank Heavy", "Poppins", "Noto Naskh Arabic", sans-serif;
+  --sv-font-body: "Avenir Book", "Poppins", system-ui, -apple-system, "Segoe UI",
+    "Noto Naskh Arabic", Arial, sans-serif;
+  --sv-font-body-medium: "Avenir Medium", "Poppins", system-ui, "Noto Naskh Arabic",
+    Arial, sans-serif;
+
+  /* --- app roles, mapped onto the brand ------------------------------------ */
+  --navy: var(--sv-ink);          /* chrome: app bar, dark surfaces */
+  --navy-2: #2a2a31;
+  --accent: var(--sv-red);        /* primary action */
+  --ok: #1e7b34;                  /* stays green — it means "Yes", not "brand" */
+  --ok-bg: #e8f6ec;
+  --danger: var(--sv-red-dark);
+  --danger-bg: #fdecec;
+  --warn-bg: #fff8dd;
+  --warn-fg: #7a5c00;
+  --bg: var(--sv-bg);
+  --surface: var(--sv-white);
+  --border: #e3e2ee;
+  --text: var(--sv-ink);
+  --muted: var(--sv-gray);
+  --radius: 14px;
+  --shadow: 0 12px 30px rgba(19, 19, 22, 0.12);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sv-font-body);
+  font-size: 16px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  /* Stops the pull-to-refresh bounce fighting the sticky header on iOS. */
+  overscroll-behavior-y: none;
+}
+
+button { font: inherit; color: inherit; }
+
+/* --- motion --------------------------------------------------------------- */
+@keyframes sv-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes sv-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Anything that animates in must also be legible with motion turned off, so
+   these reset to the finished state rather than to nothing. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* --- layout --------------------------------------------------------------- */
+.page { min-height: 100%; display: flex; flex-direction: column; }
+
+.content {
+  flex: 1;
+  padding: 16px;
+  padding-bottom: calc(24px + var(--safe-bottom));
+  max-width: 900px;
+  width: 100%;
+  margin-inline: auto;
+}
+
+.center-screen {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+}
+
+/* --- app bar -------------------------------------------------------------- */
+.app-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  padding-top: calc(12px + env(safe-area-inset-top, 0px));
+  background: var(--navy);
+  color: #fff;
+  justify-content: space-between;
+}
+
+.app-bar.sticky { position: sticky; top: 0; z-index: 20; }
+.app-bar-center { flex: 1; min-width: 0; text-align: center; }
+.app-bar-title {
+  font-family: var(--sv-font-heading);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  font-weight: 900;
+  font-size: 1.02rem;
+  line-height: 1.2;
+}
+.app-bar-sub { font-size: 0.76rem; opacity: 0.72; margin-top: 2px; }
+.app-bar-actions { display: flex; align-items: center; gap: 6px; }
+
+.icon-btn {
+  width: 44px; height: 44px;
+  display: grid; place-items: center;
+  background: rgba(255, 255, 255, 0.12);
+  border: 0; border-radius: 12px;
+  font-size: 1.15rem; cursor: pointer;
+}
+.icon-btn:active { background: rgba(255, 255, 255, 0.24); }
+
+/* Text action in the app bar. Same fill and height as .icon-btn so the two sit
+   together evenly, but sized to its label instead of a fixed 44px square. */
+.bar-btn {
+  height: 44px;
+  padding: 0 14px;
+  display: inline-flex; align-items: center;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border: 0; border-radius: 12px;
+  font-size: 0.88rem; font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.bar-btn:active { background: rgba(255, 255, 255, 0.24); }
+
+.count-badge {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* --- language toggle ------------------------------------------------------ */
+.lang-toggle {
+  min-width: 44px; height: 44px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.lang-toggle.subtle {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: transparent;
+  color: #fff;
+}
+
+/* --- progress ------------------------------------------------------------- */
+.progress-bar-sticky {
+  position: sticky;
+  top: calc(68px + env(safe-area-inset-top, 0px));
+  z-index: 19;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 16px 10px;
+}
+
+.progress-track {
+  height: 6px;
+  background: #e6eaf1;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progress-track.thick { height: 8px; }
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--sv-red), var(--sv-gold));
+  border-radius: 999px;
+  /* Slower and eased so a tick reads as the bar growing, not jumping. */
+  transition: width 0.45s var(--ease);
+}
+
+.progress-legend {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+/* --- outlet grid ---------------------------------------------------------- */
+.section-title {
+  font-family: var(--sv-font-heading);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.9rem;
+  color: var(--muted);
+  margin: 4px 0 12px;
+  font-weight: 900;
+}
+
+.location-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+@media (min-width: 560px) {
+  .location-grid { grid-template-columns: 1fr 1fr; }
+}
+
+.location-card {
+  text-align: start;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-inline-start: 4px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  transition: transform 0.18s var(--ease), box-shadow 0.18s var(--ease),
+    border-color 0.18s ease;
+  /* Staggered so the grid assembles instead of appearing all at once. */
+  animation: sv-rise 0.4s var(--ease) both;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 104px;
+}
+.location-card:active { transform: scale(0.99); }
+.location-card.progress { border-inline-start-color: var(--accent); }
+.location-card.completed { border-inline-start-color: var(--ok); }
+
+.location-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.location-name {
+  font-family: var(--sv-font-heading);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  font-weight: 900;
+  font-size: 1.06rem;
+}
+.location-detail { font-size: 0.8rem; color: var(--muted); margin-top: -6px; }
+.location-card-bottom {
+  display: flex; justify-content: space-between;
+  font-size: 0.8rem; color: var(--muted);
+}
+
+.location-card:nth-child(1) { animation-delay: 0.02s; }
+.location-card:nth-child(2) { animation-delay: 0.07s; }
+.location-card:nth-child(3) { animation-delay: 0.12s; }
+.location-card:nth-child(4) { animation-delay: 0.17s; }
+.location-card:nth-child(n + 5) { animation-delay: 0.22s; }
+
+.location-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 36px rgba(19, 19, 22, 0.16);
+  border-inline-start-color: var(--sv-red);
+}
+.location-card:active { transform: scale(0.99); }
+
+.status-tag { font-weight: 600; }
+.status-tag.progress { color: var(--accent); }
+.status-tag.completed { color: var(--ok); }
+
+/* --- categories ----------------------------------------------------------- */
+.cat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+  animation: sv-rise 0.4s var(--ease) both;
+  /* NO overflow:hidden here. It makes this card its own scroll container, which
+     re-anchors .cat-head's sticky offset to the card instead of the page — the
+     header then sits 112px down, on top of the second task. Corners are clipped
+     by rounding the first and last children instead. */
+}
+
+.cat-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  background: #f8fafc;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  text-align: start;
+  min-height: 52px;
+  border-start-start-radius: var(--radius);
+  border-start-end-radius: var(--radius);
+  /* Keeps the section title visible while scrolling a long section. The offset
+     clears the app bar (68px) + progress bar (51px), so it must resolve against
+     the page — see the note on .cat about overflow. Measured, not estimated: at
+     112px the pinned header slid under the progress bar, which sits above it. */
+  position: sticky;
+  top: calc(119px + env(safe-area-inset-top, 0px));
+  z-index: 5;
+}
+
+.cat-name {
+  font-family: var(--sv-font-heading);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 900;
+  display: flex; align-items: center; gap: 8px;
+}
+.cat:nth-of-type(1) { animation-delay: 0.02s; }
+.cat:nth-of-type(2) { animation-delay: 0.07s; }
+.cat:nth-of-type(3) { animation-delay: 0.12s; }
+.cat:nth-of-type(4) { animation-delay: 0.17s; }
+.cat:nth-of-type(n + 5) { animation-delay: 0.22s; }
+
+/* Collapsible body.
+   grid-template-rows 1fr -> 0fr animates to the content's real height with no
+   JS measuring, and unlike a height:auto transition it works on iOS Safari 16+
+   as well as Chrome — which matters, since this app lives on technicians'
+   phones. max-height was the other option and needs a magic number that either
+   clips tall sections or makes short ones feel sluggish. */
+.cat-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.3s var(--ease);
+}
+.cat-body > .task-list {
+  overflow: hidden;
+  min-height: 0; /* grid items floor at min-content; without this it can't shrink */
+}
+.cat.is-collapsed .cat-body { grid-template-rows: 0fr; }
+
+/* The list stays mounted so it can animate, so take it out of the tab order
+   once it is closed. Delayed on the way out so it stays visible while shrinking,
+   immediate on the way in. */
+.cat.is-collapsed .cat-body > .task-list {
+  visibility: hidden;
+  transition: visibility 0s 0.3s; /* hide only after the collapse finishes */
+}
+
+/* Collapsed, the header is the whole card again. */
+.cat.is-collapsed .cat-head {
+  border-end-start-radius: var(--radius);
+  border-end-end-radius: var(--radius);
+  border-bottom-color: transparent;
+}
+
+.cat-icon { font-size: 1.1rem; }
+.cat-right { display: flex; align-items: center; gap: 10px; color: var(--muted); }
+.cat-count { font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+.chev { transition: transform 0.2s; display: inline-block; }
+.chev.open { transform: rotate(180deg); }
+
+/* --- tasks ---------------------------------------------------------------- */
+.task-list { list-style: none; margin: 0; padding: 0; }
+
+.task {
+  padding: 12px 16px;
+  border-bottom: 1px solid #eef1f6;
+  border-inline-start: 4px solid transparent;
+  transition: background 0.4s, border-color 0.2s;
+}
+.task:last-child {
+  border-bottom: 0;
+  /* Was handled by overflow:hidden on .cat; see the note there. */
+  border-end-start-radius: var(--radius);
+  border-end-end-radius: var(--radius);
+}
+.task.ok { border-inline-start-color: var(--ok); background: #fbfefc; }
+.task.fail { border-inline-start-color: var(--danger); background: var(--danger-bg); }
+.task.flash { background: #fff8dd; }
+
+.task-main { display: flex; align-items: flex-start; gap: 12px; }
+.task-text { flex: 1; min-width: 0; }
+.task-title { font-weight: 550; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.task-desc { font-size: 0.84rem; color: var(--muted); margin-top: 3px; }
+
+.carry-note {
+  margin-top: 6px;
+  font-size: 0.78rem;
+  color: var(--warn-fg);
+  background: var(--warn-bg);
+  border-radius: 8px;
+  padding: 5px 8px;
+}
+
+.task-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+.ans-btn {
+  width: 48px; height: 48px;
+  /* Circles rather than squares — same 999px language as .btn, and the round
+     target reads faster than a rounded square at a glance. */
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: #fff;
+  font-size: 1.25rem; font-weight: 700;
+  cursor: pointer;
+  display: grid; place-items: center;
+  transition: transform 0.12s var(--ease), background 0.15s, border-color 0.15s,
+    box-shadow 0.15s;
+}
+.ans-btn:not(:disabled):hover { transform: translateY(-1px); }
+.ans-btn:active { transform: scale(0.94); }
+/* Confirms the tap landed, without waiting for the network round-trip. */
+.ans-btn.yes.active { animation: sv-pop 0.28s var(--ease); }
+.ans-btn.no.active { animation: sv-pop 0.28s var(--ease); }
+
+@keyframes sv-pop {
+  0%   { transform: scale(0.9); }
+  55%  { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+.ans-btn:disabled { opacity: 0.5; }
+.ans-btn.yes { color: var(--ok); }
+.ans-btn.no { color: var(--danger); }
+.ans-btn.yes.active { background: var(--ok); border-color: var(--ok); color: #fff; }
+.ans-btn.no.active { background: var(--danger); border-color: var(--danger); color: #fff; }
+
+.task-meta {
+  display: flex; flex-wrap: wrap; align-items: center;
+  justify-content: space-between; gap: 8px;
+  margin-top: 8px;
+  font-size: 0.78rem; color: var(--muted);
+}
+.meta-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.ts { font-variant-numeric: tabular-nums; }
+
+.task-comment {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.035);
+  border-radius: 8px;
+  font-size: 0.88rem;
+  white-space: pre-wrap;
+}
+
+.task-error { margin-top: 8px; color: var(--danger); font-size: 0.82rem; }
+
+/* --- comment editor ------------------------------------------------------- */
+.comment-editor { margin-top: 10px; }
+.comment-editor textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  /* 16px keeps iOS from zooming the page when the field is focused. */
+  font: inherit; font-size: 16px;
+  resize: vertical;
+}
+.comment-editor textarea:focus { outline: 2px solid var(--sv-ink); outline-offset: 1px; }
+.editor-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+
+/* --- photos --------------------------------------------------------------- */
+.photo-strip { display: flex; gap: 8px; margin-top: 10px; overflow-x: auto; padding-bottom: 4px; }
+.thumb { position: relative; flex: 0 0 auto; }
+.thumb img { width: 76px; height: 76px; object-fit: cover; border-radius: 10px; border: 1px solid var(--border); }
+.thumb-x {
+  position: absolute; top: -6px; inset-inline-end: -6px;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--danger); color: #fff; border: 2px solid #fff;
+  font-size: 0.9rem; line-height: 1; cursor: pointer;
+}
+
+/* --- buttons & fields ----------------------------------------------------- */
+.btn {
+  border: 2px solid transparent;
+  /* Pill, matching the captive portal's button shape. */
+  border-radius: 999px;
+  padding: 12px 22px;
+  min-height: 48px;
+  font-family: var(--sv-font-body-medium);
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease,
+    opacity 0.15s ease;
+}
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn:not(:disabled):hover { transform: translateY(-1px); }
+.btn:not(:disabled):active { transform: scale(0.97); }
+.btn.primary {
+  background: var(--sv-red);
+  color: var(--sv-white);
+  box-shadow: 0 8px 18px rgba(235, 29, 37, 0.35);
+}
+.btn.primary:not(:disabled):hover { background: var(--sv-red-dark); }
+.btn.danger { background: var(--danger); color: #fff; }
+.btn.ghost { background: transparent; border-color: var(--sv-ink); color: var(--sv-ink); }
+.btn.block { width: 100%; }
+/* Stacked full-width buttons used to be separated only by the whitespace
+   between them in the markup, which vanished once the buttons grew to 48px.
+   Space them explicitly — "Sign out" sitting flush under "Update" is an easy
+   mis-tap on a phone. */
+.btn.block + .btn.block { margin-top: 10px; }
+.btn.sm { min-height: 40px; padding: 8px 14px; font-size: 0.9rem; }
+.btn.lg { min-height: 54px; font-size: 1.05rem; }
+
+.link-btn {
+  background: none; border: 0; padding: 4px 0;
+  color: var(--accent); font-size: 0.8rem; font-weight: 600; cursor: pointer;
+  min-height: 32px;
+}
+.link-btn.danger { color: var(--danger); }
+
+.field { display: block; margin-bottom: 14px; }
+.field > span { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
+.field input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 13px 14px;
+  font: inherit; font-size: 16px;
+  background: #fff;
+}
+/* Ink, not --accent. --accent is brand red, and a red ring around a field you
+   are simply typing in reads as "this input is wrong". Red stays reserved for
+   errors and primary actions. */
+.field input:focus { outline: 2px solid var(--sv-ink); outline-offset: 1px; }
+
+/* --- pills, alerts -------------------------------------------------------- */
+.pill {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: #eef1f6;
+  color: var(--muted);
+}
+.pill.sm { font-size: 0.66rem; padding: 1px 7px; }
+.pill.danger { background: var(--danger); color: #fff; }
+.pill.muted { background: #eef1f6; color: var(--muted); }
+
+.alert {
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  font-size: 0.9rem;
+  border-inline-start: 4px solid transparent;
+  animation: sv-rise 0.35s var(--ease) both;
+}
+.alert.error { background: var(--danger-bg); color: var(--danger); border-inline-start-color: var(--sv-red); }
+.alert.warn { background: var(--warn-bg); color: var(--warn-fg); border-inline-start-color: var(--sv-gold); }
+
+.muted { color: var(--muted); font-size: 0.88rem; }
+.center { text-align: center; }
+.text-danger { color: var(--danger); font-weight: 600; }
+.empty { text-align: center; color: var(--muted); padding: 40px 20px; }
+
+/* --- login ---------------------------------------------------------------- */
+/* Kept identical to client-admin/src/styles.css. Both apps show the same door
+   to the same people; if you change one, change the other. */
+.login-screen {
+  min-height: 100dvh;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  /* Brand ink with a red cast, echoing the portal's dark hero. */
+  background: linear-gradient(160deg, var(--sv-ink) 0%, #3a1013 62%, #5a1418 100%);
+}
+.login-lang { position: fixed; top: 16px; inset-inline-end: 16px; }
+.login-card {
+  width: 100%; max-width: 380px;
+  background: var(--surface);
+  border-radius: 20px;
+  padding: 28px 22px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.25);
+  animation: sv-rise 0.5s var(--ease) both;
+}
+.login-brand { text-align: center; margin-bottom: 22px; }
+.login-logo {
+  width: 60px; height: 60px; margin: 0 auto 12px;
+  border-radius: 18px;
+  background: var(--sv-red); color: #fff;
+  box-shadow: 0 8px 18px rgba(235, 29, 37, 0.35);
+  display: grid; place-items: center;
+  font-family: var(--sv-font-heading);
+  font-weight: 900; font-size: 1.3rem; letter-spacing: 1px;
+}
+.login-brand h1 {
+  font-family: var(--sv-font-heading);
+  text-transform: uppercase; letter-spacing: 0.02em;
+  font-size: 1.18rem; margin: 0 0 2px;
+}
+.card-title {
+  font-family: var(--sv-font-heading);
+  text-transform: uppercase; letter-spacing: 0.02em;
+  font-size: 1.15rem; margin: 0 0 6px;
+}
+
+/* Login metrics are pinned here rather than inherited. The two apps set
+   different global sizes on purpose — this one is a 16px phone UI with 44px+
+   touch targets, the admin panel is a denser 15px desktop layout — so a shared
+   login screen has to opt out of both and state its own. Keep in sync with
+   client-admin/src/styles.css. */
+.login-card { font-size: 16px; }
+.login-card .field { margin-bottom: 14px; }
+.login-card .field > span { font-size: 0.85rem; margin-bottom: 6px; }
+.login-card .field input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 13px 14px;
+  font-size: 16px;
+  background: #fff;
+}
+.login-card .muted { font-size: 0.88rem; }
+.login-card .btn {
+  min-height: 48px;
+  padding: 12px 22px;
+  font-size: 1rem;
+}
+
+.submit-zone { margin-top: 22px; }
+
+/* --- spinner -------------------------------------------------------------- */
+.spinner {
+  width: 26px; height: 26px;
+  border: 3px solid rgba(0, 0, 0, 0.12);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  display: inline-block;
+  animation: spin 0.7s linear infinite;
+}
+.spinner-sm { width: 16px; height: 16px; border-width: 2px; border-top-color: currentColor; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

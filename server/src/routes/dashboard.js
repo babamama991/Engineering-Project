@@ -18,7 +18,20 @@ router.get(
     const tz = await getSetting('timezone', 'Asia/Beirut');
     const shifts = await loadShiftTypes();
     const now = DateTime.now().setZone(tz);
+
+    // resolveShiftFromClock returns null when no shift types are active, and
+    // everything below reads clock.shift — which crashed with an unhelpful
+    // "Cannot read properties of null" on a database that was never seeded.
+    // resolveUserShift already guards this; the dashboard calls the raw
+    // function, so it has to guard too. 409 = configuration is missing, and the
+    // message says which.
     const clock = resolveShiftFromClock(shifts, now);
+    if (!clock) {
+      return res.status(409).json({
+        error: 'No shift types are configured. Add them under Settings, or seed the database.',
+        code: 'NO_SHIFT_TYPES',
+      });
+    }
 
     // Allow the admin to look at a different shift/date than "now".
     // Validate before it reaches ::date, or a typo becomes a 500.

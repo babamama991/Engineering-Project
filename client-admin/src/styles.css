@@ -265,6 +265,16 @@ h3 { font-size: 1rem; margin: 0 0 12px; }
 .stat:nth-child(4) { animation-delay: 0.17s; }
 .stat:nth-child(n + 5) { animation-delay: 0.22s; }
 .stat:hover { transform: translateY(-2px); box-shadow: 0 16px 36px rgba(19, 19, 22, 0.14); }
+
+/* Clickable stats are buttons — reset the browser styling back to the card. */
+.stat-clickable {
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+  width: 100%;
+}
+.stat-clickable:focus-visible { outline: 2px solid var(--sv-ink); outline-offset: 2px; }
 .stat.danger { border-inline-start-color: var(--danger); }
 .stat.warn { border-inline-start-color: var(--sv-gold); }
 .stat-value {
@@ -289,13 +299,19 @@ h3 { font-size: 1rem; margin: 0 0 12px; }
 .location-panel.completed { border-top-color: var(--ok); }
 .panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 
-/* A whole run is one button — the entire block is the hit target, not just a
-   link inside it. Resets the browser's button styling back to a block. */
-.run-line {
-  display: block;
+.run-line { margin-bottom: 12px; }
+
+/* The location's header is the toggle for its combined task list, so the whole
+   bar is the hit target rather than a small link inside it. Resets the
+   browser's button styling back to the plain header it replaces. */
+.location-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   width: 100%;
-  margin-bottom: 12px;
-  padding: 6px 8px;
+  margin: -4px -4px 10px;
+  padding: 4px;
   border: 0;
   border-radius: 8px;
   background: none;
@@ -303,10 +319,12 @@ h3 { font-size: 1rem; margin: 0 0 12px; }
   font: inherit;
   color: inherit;
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.15s var(--ease);
+  transition: background 0.15s ease;
 }
-.run-line:hover { background: #fdf2f2; transform: translateX(2px); }
-.run-line:focus-visible { outline: 2px solid var(--sv-ink); outline-offset: 1px; }
+.location-head:hover { background: #fdf2f2; }
+.location-head:focus-visible { outline: 2px solid var(--sv-ink); outline-offset: 1px; }
+.location-head-right { display: flex; align-items: center; gap: 8px; }
+.location-head .chev { color: var(--muted); font-size: 0.8rem; }
 .run-top { display: flex; justify-content: space-between; font-size: 0.88rem; gap: 8px; }
 .run-foot { font-size: 0.72rem; }
 .bar { height: 6px; background: #e9edf3; border-radius: 999px; overflow: hidden; margin: 5px 0 3px; }

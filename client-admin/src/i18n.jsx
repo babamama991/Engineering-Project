@@ -36,6 +36,8 @@ const dict = {
     noIssues: 'No issues raised.',
     lastActivity: 'Last activity',
     viewRunDetail: 'See what was checked, and by whom',
+    viewBreakdown: 'Click to see what this counted',
+    showingFirst: 'showing the most recent',
     done: 'done',
 
     from: 'From',
@@ -191,6 +193,8 @@ const dict = {
     noIssues: 'لا توجد ملاحظات.',
     lastActivity: 'آخر نشاط',
     viewRunDetail: 'عرض ما تم فحصه ومن قام به',
+    viewBreakdown: 'اضغط لعرض التفاصيل',
+    showingFirst: 'عرض الأحدث',
     done: 'منجزة',
 
     from: 'من',

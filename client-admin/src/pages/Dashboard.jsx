@@ -24,11 +24,31 @@ export default function Dashboard() {
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  const openRun = async (runId) => {
+  // The stat card whose breakdown is open. `null` = closed.
+  const [metric, setMetric] = useState(null);
+
+  /** The rows behind a headline number — what that stat actually counted. */
+  const openMetric = async (name, label) => {
+    setMetric({ loading: true, label });
+    try {
+      const { data } = await api.get(`/dashboard/stats/${name}`, {
+        params: { from: daysAgo(6), to: today() },
+      });
+      setMetric({ ...data, label });
+    } catch (err) {
+      setError(err.userMessage);
+      setMetric(null);
+    }
+  };
+
+  /** Every task in a location for this date + shift, whoever answered it. */
+  const openLocation = async (locationId) => {
     setDetailLoading(true);
     setDetail({ loading: true });
     try {
-      const { data } = await api.get(`/dashboard/runs/${runId}`);
+      const { data } = await api.get(`/dashboard/locations/${locationId}`, {
+        params: { date: live?.businessDate ?? date, shiftId: shiftId || live?.shiftId },
+      });
       setDetail(data);
     } catch (err) {
       setError(err.userMessage);
@@ -103,11 +123,16 @@ export default function Dashboard() {
 
       {stats && (
         <div className="stat-row">
-          <Stat label={t('checksLogged')} value={stats.answers} sub="last 7 days" />
-          <Stat label={t('openIssues')} value={stats.failures} tone={stats.failures ? 'danger' : ''} sub="last 7 days" />
-          <Stat label={t('criticalIssues')} value={stats.critical_failures} tone={stats.critical_failures ? 'danger' : ''} sub="last 7 days" />
-          <Stat label={t('activeStaff')} value={stats.active_users} sub="last 7 days" />
-          <Stat label={t('unscheduledRuns')} value={stats.unscheduled_runs} tone={stats.unscheduled_runs ? 'warn' : ''} sub="last 7 days" />
+          <Stat label={t('checksLogged')} value={stats.answers} sub="last 7 days"
+            title={t('viewBreakdown')} onClick={() => openMetric('checks', t('checksLogged'))} />
+          <Stat label={t('openIssues')} value={stats.failures} tone={stats.failures ? 'danger' : ''} sub="last 7 days"
+            title={t('viewBreakdown')} onClick={() => openMetric('issues', t('openIssues'))} />
+          <Stat label={t('criticalIssues')} value={stats.critical_failures} tone={stats.critical_failures ? 'danger' : ''} sub="last 7 days"
+            title={t('viewBreakdown')} onClick={() => openMetric('critical', t('criticalIssues'))} />
+          <Stat label={t('activeStaff')} value={stats.active_users} sub="last 7 days"
+            title={t('viewBreakdown')} onClick={() => openMetric('activeStaff', t('activeStaff'))} />
+          <Stat label={t('unscheduledRuns')} value={stats.unscheduled_runs} tone={stats.unscheduled_runs ? 'warn' : ''} sub="last 7 days"
+            title={t('viewBreakdown')} onClick={() => openMetric('unscheduled', t('unscheduledRuns'))} />
         </div>
       )}
 
@@ -118,16 +143,26 @@ export default function Dashboard() {
       <div className="card-grid">
         {live.locations.map((o) => (
           <div key={o.id} className={`panel location-panel ${o.coverage}`}>
-            <div className="panel-head">
+            {/* The whole header opens the location's combined list — every task
+                for this date and shift, whoever ticked it. */}
+            <button
+              type="button"
+              className="panel-head location-head"
+              onClick={() => openLocation(o.id)}
+              title={t('viewRunDetail')}
+            >
               <strong>{pick(o, 'name')}</strong>
-              <span className={`tag ${o.coverage}`}>
-                {o.coverage === 'untouched'
-                  ? t('untouched')
-                  : o.coverage === 'completed'
-                    ? t('completed')
-                    : t('inProgress')}
+              <span className="location-head-right">
+                <span className={`tag ${o.coverage}`}>
+                  {o.coverage === 'untouched'
+                    ? t('untouched')
+                    : o.coverage === 'completed'
+                      ? t('completed')
+                      : t('inProgress')}
+                </span>
+                <span className="chev">▾</span>
               </span>
-            </div>
+            </button>
 
             {o.runs.length === 0 ? (
               <p className="muted small">0 / {o.totalTasks}</p>
@@ -135,13 +170,7 @@ export default function Dashboard() {
               o.runs.map((r) => {
                 const pct = r.total ? Math.round((r.answered / r.total) * 100) : 0;
                 return (
-                  <button
-                    type="button"
-                    className="run-line"
-                    key={r.runId}
-                    onClick={() => openRun(r.runId)}
-                    title={t('viewRunDetail')}
-                  >
+                  <div className="run-line" key={r.runId}>
                     <div className="run-top">
                       <span>
                         {r.userName}
@@ -158,7 +187,7 @@ export default function Dashboard() {
                     <div className="run-foot muted small">
                       {t('lastActivity')}: {clock(r.lastActivity)}
                     </div>
-                  </button>
+                  </div>
                 );
               })
             )}
@@ -215,14 +244,114 @@ export default function Dashboard() {
         </section>
       </div>
 
+      {metric && (
+        <Modal
+          wide
+          title={metric.loading ? t('loading') : `${metric.label} · ${metric.count}`}
+          onClose={() => setMetric(null)}
+        >
+          {metric.loading ? (
+            <div className="center-screen"><Spinner /></div>
+          ) : metric.count === 0 ? (
+            <p className="muted">{t('noResults')}</p>
+          ) : (
+            <>
+              <p className="muted small">
+                {metric.from} → {metric.to}
+                {metric.truncated && <> · {t('showingFirst')} {metric.count}</>}
+              </p>
+              <div className="table-scroll">
+                {metric.kind === 'answers' && (
+                  <table className="table compact">
+                    <thead>
+                      <tr>
+                        <th>{t('date')}</th><th>{t('time')}</th><th>{t('staff')}</th>
+                        <th>{t('location')}</th><th>{t('task')}</th>
+                        <th>{t('answer')}</th><th>{t('comment')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {metric.rows.map((r) => (
+                        <tr key={r.answerId} className={r.answer ? '' : 'row-fail'}>
+                          <td className="mono nowrap">{r.businessDate}</td>
+                          <td className="mono nowrap">{r.localTime?.slice(11)}</td>
+                          <td className="nowrap">{r.staff}</td>
+                          <td>{pick(r, 'location')}</td>
+                          <td>
+                            {pick(r, 'task')}
+                            {r.isCritical && <span className="tag danger sm">{t('critical')}</span>}
+                          </td>
+                          <td className={r.answer ? 'ok bold' : 'text-danger bold'}>
+                            {r.answer ? t('yes') : t('no')}
+                          </td>
+                          <td className="comment-cell">
+                            {r.comment}
+                            {r.photoCount > 0 && <span className="muted small"> 📷{r.photoCount}</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+
+                {metric.kind === 'staff' && (
+                  <table className="table compact">
+                    <thead>
+                      <tr>
+                        <th>{t('staff')}</th><th>{t('role')}</th>
+                        <th>{t('checksLogged')}</th><th>{t('openIssues')}</th>
+                        <th>{t('lastActivity')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {metric.rows.map((r) => (
+                        <tr key={r.userId}>
+                          <td>{r.staff} <span className="muted small">@{r.username}</span></td>
+                          <td>{r.role === 'admin' ? t('admin') : r.role === 'hod' ? t('hodRole') : t('staffRole')}</td>
+                          <td className="mono">{r.checks}</td>
+                          <td className={r.issues ? 'text-danger bold mono' : 'mono'}>{r.issues}</td>
+                          <td className="mono nowrap">{r.lastActivity}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+
+                {metric.kind === 'runs' && (
+                  <table className="table compact">
+                    <thead>
+                      <tr>
+                        <th>{t('date')}</th><th>{t('shift')}</th><th>{t('staff')}</th>
+                        <th>{t('location')}</th><th>{t('startTime')}</th><th>{t('coverage')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {metric.rows.map((r) => (
+                        <tr key={r.runId}>
+                          <td className="mono nowrap">{r.businessDate}</td>
+                          <td>{r.shiftCode}</td>
+                          <td className="nowrap">{r.staff}</td>
+                          <td>{pick(r, 'location')}</td>
+                          <td className="mono nowrap">{r.startedAt?.slice(11)}</td>
+                          <td className="mono">
+                            {r.answered}/{r.total}
+                            {r.failed > 0 && <span className="text-danger"> · {r.failed}✕</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </>
+          )}
+        </Modal>
+      )}
+
       {detail && (
         <Modal
           wide
-          title={
-            detail.loading
-              ? t('loading')
-              : `${pick(detail.run, 'locationName')} · ${detail.run.userName}`
-          }
+          title={detail.loading ? t('loading') : pick(detail.location, 'locationName')}
           onClose={() => setDetail(null)}
         >
           {detail.loading || detailLoading ? (
@@ -230,13 +359,13 @@ export default function Dashboard() {
           ) : (
             <>
               <p className="muted small">
-                {detail.run.businessDate} · {pick(detail.run, 'shiftName')} ·{' '}
+                {detail.location.businessDate} · {pick(detail.location, 'shiftName')} ·{' '}
                 {detail.summary.done}/{detail.summary.total} {t('done')}
                 {detail.summary.failed > 0 && (
                   <span className="text-danger"> · {detail.summary.failed} {t('no')}</span>
                 )}
-                {detail.run.source === 'unscheduled' && (
-                  <span className="tag warn sm">{t('unscheduledRuns')}</span>
+                {detail.location.staff.length > 0 && (
+                  <> · {detail.location.staff.join(', ')}</>
                 )}
               </p>
 
@@ -306,12 +435,21 @@ export default function Dashboard() {
   );
 }
 
-function Stat({ label, value, sub, tone = '' }) {
-  return (
-    <div className={`stat ${tone}`}>
+/** A headline number. Clickable when `onClick` is given — then it's a button. */
+function Stat({ label, value, sub, tone = '', onClick, title }) {
+  const body = (
+    <>
       <div className="stat-value">{value}</div>
       <div className="stat-label">{label}</div>
       {sub && <div className="stat-sub">{sub}</div>}
-    </div>
+    </>
+  );
+
+  if (!onClick) return <div className={`stat ${tone}`}>{body}</div>;
+
+  return (
+    <button type="button" className={`stat stat-clickable ${tone}`} onClick={onClick} title={title}>
+      {body}
+    </button>
   );
 }

@@ -160,52 +160,69 @@ router.get(
  * GET /api/dashboard/runs/:runId
  */
 router.get(
-  '/runs/:runId',
+  '/locations/:locationId',
   asyncHandler(async (req, res) => {
-    const runId = Number(req.params.runId);
-    if (!Number.isInteger(runId) || runId <= 0) {
-      return res.status(400).json({ error: 'Invalid run id' });
+    const locationId = Number(req.params.locationId);
+    if (!Number.isInteger(locationId) || locationId <= 0) {
+      return res.status(400).json({ error: 'Invalid location id' });
+    }
+    if (req.query.date && !/^\d{4}-\d{2}-\d{2}$/.test(req.query.date)) {
+      return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
+    }
+    const shiftIdParam = Number(req.query.shiftId);
+    if (!Number.isInteger(shiftIdParam) || shiftIdParam <= 0) {
+      return res.status(400).json({ error: 'shiftId is required' });
     }
 
-    const { rows: runs } = await query(
-      `SELECT r.id, r.business_date::text AS business_date, r.status, r.source,
-              r.started_at, r.completed_at,
-              u.full_name, u.username,
-              l.name_en AS location_name_en, l.name_ar AS location_name_ar,
+    const { rows: locs } = await query(
+      `SELECT l.id, l.name_en AS location_name_en, l.name_ar AS location_name_ar,
               st.code AS shift_code, st.name_en AS shift_name_en, st.name_ar AS shift_name_ar
-         FROM checklist_runs r
-         JOIN users u        ON u.id = r.user_id
-         JOIN locations l    ON l.id = r.location_id
-         JOIN shift_types st ON st.id = r.shift_type_id
-        WHERE r.id = $1`,
-      [runId]
+         FROM locations l
+         CROSS JOIN shift_types st
+        WHERE l.id = $1 AND st.id = $2 AND l.deleted_at IS NULL`,
+      [locationId, shiftIdParam]
     );
-    if (!runs.length) return res.status(404).json({ error: 'Run not found' });
-    const run = runs[0];
+    if (!locs.length) return res.status(404).json({ error: 'Location not found' });
+    const head = locs[0];
+    const businessDate = req.query.date;
 
-    // Every active task in the location, with this run's answer where one
-    // exists. LEFT JOIN rather than filtering, so the outstanding ones are
-    // visible too — "5 of 39 done" is only useful with the other 34 named.
+    // Every active task in the location, with whichever answer exists for this
+    // date + shift — from ANY staff member, not one person's run. Two
+    // technicians splitting a location produce one combined list, which is how
+    // a manager actually reads coverage.
+    //
+    // The LATERAL takes the most recent answer per task: if the same task was
+    // answered twice, the current state wins and the earlier one stays in
+    // task_answer_history.
     const { rows } = await query(
       `SELECT t.id AS task_id, t.description_en, t.description_ar, t.is_critical,
               s.name_en AS sub_location_name_en, s.name_ar AS sub_location_name_ar,
               COALESCE(s.sort_order, 9999) AS sub_location_sort,
               t.sort_order,
-              a.answer, a.comment, a.answered_at, a.revision,
-              au.full_name AS answered_by,
+              a.answer, a.comment, a.answered_at, a.revision, a.answered_by_name,
               COALESCE(ph.photos, '[]'::json) AS photos
          FROM tasks t
          LEFT JOIN sub_locations s ON s.id = t.sub_location_id AND s.deleted_at IS NULL
-         LEFT JOIN task_answers a  ON a.task_id = t.id AND a.run_id = $1
-         LEFT JOIN users au        ON au.id = a.answered_by
+         LEFT JOIN LATERAL (
+            SELECT ta.id, ta.answer, ta.comment, ta.answered_at, ta.revision,
+                   u.full_name AS answered_by_name
+              FROM task_answers ta
+              JOIN checklist_runs r ON r.id = ta.run_id
+              JOIN users u          ON u.id = ta.answered_by
+             WHERE ta.task_id = t.id
+               AND r.location_id = $1
+               AND r.business_date = $2::date
+               AND r.shift_type_id = $3
+             ORDER BY ta.answered_at DESC
+             LIMIT 1
+         ) a ON TRUE
          LEFT JOIN LATERAL (
             SELECT json_agg(json_build_object('id', p.id, 'url', '/uploads/' || p.file_path)) AS photos
               FROM task_photos p WHERE p.answer_id = a.id
          ) ph ON TRUE
-        WHERE t.location_id = (SELECT location_id FROM checklist_runs WHERE id = $1)
-          AND t.deleted_at IS NULL AND t.is_active
+        WHERE t.location_id = $1 AND t.deleted_at IS NULL AND t.is_active
         ORDER BY a.answered_at DESC NULLS LAST, sub_location_sort, t.sort_order, t.id`,
-      [runId]
+      [locationId, businessDate, shiftIdParam]
     );
 
     const tz = await getSetting('timezone', 'Asia/Beirut');
@@ -224,26 +241,25 @@ router.get(
       comment: r.comment,
       answeredAt: r.answered_at,
       localTime: local(r.answered_at),
-      answeredBy: r.answered_by,
+      answeredBy: r.answered_by_name,
       revision: r.revision,
       photos: r.photos || [],
     }));
 
+    // Who contributed, so the header can name them without the caller
+    // cross-referencing the coverage card.
+    const staff = [...new Set(tasks.filter((x) => x.answeredBy).map((x) => x.answeredBy))];
+
     res.json({
-      run: {
-        id: run.id,
-        businessDate: run.business_date,
-        status: run.status,
-        source: run.source,
-        startedAt: run.started_at,
-        completedAt: run.completed_at,
-        userName: run.full_name,
-        username: run.username,
-        locationNameEn: run.location_name_en,
-        locationNameAr: run.location_name_ar,
-        shiftCode: run.shift_code,
-        shiftNameEn: run.shift_name_en,
-        shiftNameAr: run.shift_name_ar,
+      location: {
+        id: head.id,
+        businessDate,
+        locationNameEn: head.location_name_en,
+        locationNameAr: head.location_name_ar,
+        shiftCode: head.shift_code,
+        shiftNameEn: head.shift_name_en,
+        shiftNameAr: head.shift_name_ar,
+        staff,
       },
       tasks,
       summary: {
@@ -252,6 +268,151 @@ router.get(
         failed: tasks.filter((x) => x.answer === false).length,
       },
     });
+  })
+);
+
+/**
+ * What's behind a headline number. Each stat card opens into the rows it counted,
+ * so "3 critical issues" becomes three named tasks rather than a number to go
+ * hunting for in Reports.
+ *
+ * Three shapes come back, flagged by `kind`, because the useful columns differ:
+ *   answers — one row per check      (checks / issues / critical)
+ *   staff   — one row per person     (activeStaff)
+ *   runs    — one row per round      (unscheduled)
+ *
+ * GET /api/dashboard/stats/:metric?from=&to=
+ */
+router.get(
+  '/stats/:metric',
+  asyncHandler(async (req, res) => {
+    const { metric } = req.params;
+    const from = req.query.from || DateTime.now().minus({ days: 6 }).toISODate();
+    const to = req.query.to || DateTime.now().toISODate();
+    for (const d of [from, to]) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+        return res.status(400).json({ error: 'from/to must be YYYY-MM-DD' });
+      }
+    }
+
+    const tz = await getSetting('timezone', 'Asia/Beirut');
+    const local = (ts) =>
+      ts ? DateTime.fromJSDate(new Date(ts)).setZone(tz).toFormat('yyyy-LL-dd HH:mm:ss') : null;
+
+    // Capped: these are a glance at what happened, not an export. Reports does
+    // the exhaustive version with filters and Excel.
+    const LIMIT = 300;
+
+    if (['checks', 'issues', 'critical'].includes(metric)) {
+      const where = ['business_date BETWEEN $1::date AND $2::date'];
+      if (metric !== 'checks') where.push('answer = FALSE');
+      if (metric === 'critical') where.push('is_critical');
+
+      const { rows } = await query(
+        `SELECT * FROM v_report_rows
+          WHERE ${where.join(' AND ')}
+          ORDER BY answered_at DESC, answer_id DESC
+          LIMIT ${LIMIT}`,
+        [from, to]
+      );
+
+      return res.json({
+        kind: 'answers',
+        metric, from, to,
+        count: rows.length,
+        truncated: rows.length === LIMIT,
+        rows: rows.map((r) => ({
+          answerId: r.answer_id,
+          businessDate: r.business_date,
+          localTime: local(r.answered_at),
+          shiftCode: r.shift_code,
+          staff: r.full_name,
+          locationEn: r.location_name_en,
+          locationAr: r.location_name_ar,
+          subLocationEn: r.sub_location_name_en,
+          subLocationAr: r.sub_location_name_ar,
+          taskEn: r.task_description_en,
+          taskAr: r.task_description_ar,
+          isCritical: r.is_critical,
+          answer: r.answer,
+          comment: r.comment,
+          photoCount: r.photo_count,
+        })),
+      });
+    }
+
+    if (metric === 'activeStaff') {
+      const { rows } = await query(
+        // Driven off checklist_runs, matching how the headline counts
+        // active_users — otherwise someone who opened a location and ticked
+        // nothing is in the number but missing from the list. LEFT JOIN so they
+        // appear with 0 checks, which is exactly who a manager wants to spot.
+        `SELECT u.id, u.full_name, u.username, u.role,
+                count(a.id)::int AS checks,
+                count(a.id) FILTER (WHERE a.answer = FALSE)::int AS issues,
+                max(a.answered_at) AS last_activity
+           FROM checklist_runs r
+           JOIN users u             ON u.id = r.user_id
+           LEFT JOIN task_answers a ON a.run_id = r.id
+          WHERE r.business_date BETWEEN $1::date AND $2::date
+          GROUP BY u.id, u.full_name, u.username, u.role
+          ORDER BY checks DESC, u.full_name`,
+        [from, to]
+      );
+      return res.json({
+        kind: 'staff',
+        metric, from, to,
+        count: rows.length,
+        rows: rows.map((r) => ({
+          userId: r.id,
+          staff: r.full_name,
+          username: r.username,
+          role: r.role,
+          checks: r.checks,
+          issues: r.issues,
+          lastActivity: local(r.last_activity),
+        })),
+      });
+    }
+
+    if (metric === 'unscheduled') {
+      const { rows } = await query(
+        `SELECT r.id, r.business_date::text AS business_date, r.status,
+                u.full_name, l.name_en AS location_en, l.name_ar AS location_ar,
+                st.code AS shift_code, r.started_at,
+                p.total_tasks, p.answered_tasks, p.failed_tasks
+           FROM checklist_runs r
+           JOIN users u          ON u.id = r.user_id
+           JOIN locations l      ON l.id = r.location_id
+           JOIN shift_types st   ON st.id = r.shift_type_id
+           JOIN v_run_progress p ON p.run_id = r.id
+          WHERE r.business_date BETWEEN $1::date AND $2::date
+            AND r.source = 'unscheduled'
+          ORDER BY r.started_at DESC
+          LIMIT ${LIMIT}`,
+        [from, to]
+      );
+      return res.json({
+        kind: 'runs',
+        metric, from, to,
+        count: rows.length,
+        rows: rows.map((r) => ({
+          runId: r.id,
+          businessDate: r.business_date,
+          staff: r.full_name,
+          locationEn: r.location_en,
+          locationAr: r.location_ar,
+          shiftCode: r.shift_code,
+          startedAt: local(r.started_at),
+          answered: r.answered_tasks,
+          total: r.total_tasks,
+          failed: r.failed_tasks,
+          status: r.status,
+        })),
+      });
+    }
+
+    return res.status(400).json({ error: `Unknown metric: ${metric}` });
   })
 );
 

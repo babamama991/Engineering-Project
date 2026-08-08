@@ -40,7 +40,7 @@ export default function App() {
         <Route path="/roster" element={<Roster />} />
         <Route path="/tasks" element={<Tasks />} />
         <Route path="/locations" element={<Locations />} />
-        <Route path="/subLocations" element={<SubLocations />} />
+        <Route path="/sub-locations" element={<SubLocations />} />
         <Route path="/users" element={<Users />} />
         {/* Settings is IT-only. Hiding the nav link isn't enough — someone can
             type the URL — so the route itself is gone for a HOD. */}

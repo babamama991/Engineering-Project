@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import api from '../api/client.js';
+import api, { fileUrl } from '../api/client.js';
 import { useLang } from '../i18n.jsx';
 import Spinner from '../components/Spinner.jsx';
+import Modal from '../components/Modal.jsx';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const daysAgo = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
@@ -18,6 +19,24 @@ export default function Dashboard() {
   const [auto, setAuto] = useState(true);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+
+  // The run whose detail is open. `null` = closed.
+  const [detail, setDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  const openRun = async (runId) => {
+    setDetailLoading(true);
+    setDetail({ loading: true });
+    try {
+      const { data } = await api.get(`/dashboard/runs/${runId}`);
+      setDetail(data);
+    } catch (err) {
+      setError(err.userMessage);
+      setDetail(null);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
 
   const load = useCallback(async () => {
     setError('');
@@ -116,7 +135,13 @@ export default function Dashboard() {
               o.runs.map((r) => {
                 const pct = r.total ? Math.round((r.answered / r.total) * 100) : 0;
                 return (
-                  <div className="run-line" key={r.runId}>
+                  <button
+                    type="button"
+                    className="run-line"
+                    key={r.runId}
+                    onClick={() => openRun(r.runId)}
+                    title={t('viewRunDetail')}
+                  >
                     <div className="run-top">
                       <span>
                         {r.userName}
@@ -133,7 +158,7 @@ export default function Dashboard() {
                     <div className="run-foot muted small">
                       {t('lastActivity')}: {clock(r.lastActivity)}
                     </div>
-                  </div>
+                  </button>
                 );
               })
             )}
@@ -189,6 +214,94 @@ export default function Dashboard() {
           )}
         </section>
       </div>
+
+      {detail && (
+        <Modal
+          wide
+          title={
+            detail.loading
+              ? t('loading')
+              : `${pick(detail.run, 'locationName')} · ${detail.run.userName}`
+          }
+          onClose={() => setDetail(null)}
+        >
+          {detail.loading || detailLoading ? (
+            <div className="center-screen"><Spinner /></div>
+          ) : (
+            <>
+              <p className="muted small">
+                {detail.run.businessDate} · {pick(detail.run, 'shiftName')} ·{' '}
+                {detail.summary.done}/{detail.summary.total} {t('done')}
+                {detail.summary.failed > 0 && (
+                  <span className="text-danger"> · {detail.summary.failed} {t('no')}</span>
+                )}
+                {detail.run.source === 'unscheduled' && (
+                  <span className="tag warn sm">{t('unscheduledRuns')}</span>
+                )}
+              </p>
+
+              <div className="table-scroll">
+                <table className="table compact">
+                  <thead>
+                    <tr>
+                      <th>{t('time')}</th>
+                      <th>{t('subLocation')}</th>
+                      <th>{t('task')}</th>
+                      <th>{t('answer')}</th>
+                      <th>{t('staff')}</th>
+                      <th>{t('comment')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* Answered first (newest at the top), outstanding last —
+                        the server orders it that way. */}
+                    {detail.tasks.map((task) => (
+                      <tr
+                        key={task.taskId}
+                        className={
+                          !task.answered ? 'row-muted' : task.answer ? '' : 'row-fail'
+                        }
+                      >
+                        <td className="mono nowrap">{task.localTime || '—'}</td>
+                        <td>{pick(task, 'subLocationName') || '—'}</td>
+                        <td>
+                          {pick(task, 'description')}
+                          {task.isCritical && (
+                            <span className="tag danger sm">{t('critical')}</span>
+                          )}
+                          {task.revision > 1 && <span className="tag sm">{t('edited')}</span>}
+                        </td>
+                        <td className={task.answer ? 'ok bold' : task.answered ? 'text-danger bold' : 'muted'}>
+                          {task.answered ? (task.answer ? t('yes') : t('no')) : t('untouched')}
+                        </td>
+                        <td className="nowrap">{task.answeredBy || '—'}</td>
+                        <td className="comment-cell">
+                          {task.comment}
+                          {task.photos?.length > 0 && (
+                            <div className="report-thumbs">
+                              {task.photos.map((p) => (
+                                <a
+                                  key={p.id}
+                                  className="report-thumb"
+                                  href={fileUrl(p.url)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  <img src={fileUrl(p.url)} alt="" loading="lazy" />
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </Modal>
+      )}
     </div>
   );
 }

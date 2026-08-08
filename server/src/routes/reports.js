@@ -103,10 +103,10 @@ router.get(
         username: r.username,
         fullName: r.full_name,
         locationId: r.location_id,
-        location: pick(r, f.lang, 'outlet_name'),
-        subLocation: pick(r, f.lang, 'category_name') || '—',
+        location: pick(r, f.lang, 'location_name'),
+        subLocation: pick(r, f.lang, 'sub_location_name') || '—',
         taskId: r.task_id,
-        task: pick(r, f.lang, 'task_title'),
+        task: pick(r, f.lang, 'task_description'),
         isCritical: r.is_critical,
         answer: r.answer,
         comment: r.comment,
@@ -151,7 +151,7 @@ router.get(
         critical: rows.filter((r) => !r.answer && r.is_critical).length,
       },
       byUser: group((r) => r.user_id, (r) => r.full_name),
-      byOutlet: group((r) => r.location_id, (r) => pick(r, f.lang, 'outlet_name')),
+      byOutlet: group((r) => r.location_id, (r) => pick(r, f.lang, 'location_name')),
       byShift: group((r) => r.shift_code, (r) => pick(r, f.lang, 'shift_name')),
       byDate: group((r) => r.business_date, (r) => r.business_date),
     });
@@ -207,9 +207,9 @@ router.get(
         time: dt.toFormat('HH:mm:ss'),
         staff: r.full_name,
         username: r.username,
-        location: pick(r, f.lang, 'outlet_name'),
-        subLocation: pick(r, f.lang, 'category_name') || '—',
-        task: pick(r, f.lang, 'task_title'),
+        location: pick(r, f.lang, 'location_name'),
+        subLocation: pick(r, f.lang, 'sub_location_name') || '—',
+        task: pick(r, f.lang, 'task_description'),
         critical: r.is_critical ? 'YES' : '',
         answer: r.answer ? 'Yes' : 'No',
         comment: r.comment || '',
@@ -251,7 +251,7 @@ router.get(
       const key = `${r.user_id}|${r.location_id}`;
       if (!agg.has(key)) {
         agg.set(key, {
-          staff: r.full_name, location: pick(r, f.lang, 'outlet_name'),
+          staff: r.full_name, location: pick(r, f.lang, 'location_name'),
           total: 0, yes: 0, no: 0, critical: 0,
         });
       }
@@ -272,7 +272,7 @@ router.get(
       ['Report', 'Engineering checklist log'],
       ['Date range', `${f.from}  to  ${f.to}`],
       ['Staff filter', f.userId ? rows[0]?.full_name || `user #${f.userId}` : 'All staff'],
-      ['Location filter', f.locationId ? rows[0]?.[`outlet_name_${f.lang}`] || `location #${f.locationId}` : 'All locations'],
+      ['Location filter', f.locationId ? rows[0]?.[`location_name_${f.lang}`] || `location #${f.locationId}` : 'All locations'],
       ['Answer filter', f.answer ? f.answer.toUpperCase() : 'All'],
       ['Rows', String(rows.length)],
       ['Timezone', tz],
@@ -380,9 +380,9 @@ router.get(
         const cells = {
           time: dt.toFormat('HH:mm'),
           staff: r.full_name,
-          location: pick(r, f.lang, 'outlet_name'),
-          subLocation: pick(r, f.lang, 'category_name') || '—',
-          task: pick(r, f.lang, 'task_title'),
+          location: pick(r, f.lang, 'location_name'),
+          subLocation: pick(r, f.lang, 'sub_location_name') || '—',
+          task: pick(r, f.lang, 'task_description'),
           answer: r.answer ? 'Yes' : 'NO',
           comment: r.comment || '',
         };
@@ -485,9 +485,9 @@ router.get(
       timeline: answers.rows.map((a) => ({
         time: DateTime.fromJSDate(new Date(a.answered_at)).setZone(tz).toFormat('HH:mm:ss'),
         answeredAt: a.answered_at,
-        location: pick(a, lang, 'outlet_name'),
-        subLocation: pick(a, lang, 'category_name') || '—',
-        task: pick(a, lang, 'task_title'),
+        location: pick(a, lang, 'location_name'),
+        subLocation: pick(a, lang, 'sub_location_name') || '—',
+        task: pick(a, lang, 'task_description'),
         answer: a.answer,
         comment: a.comment,
         isCritical: a.is_critical,

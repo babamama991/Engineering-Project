@@ -289,7 +289,24 @@ h3 { font-size: 1rem; margin: 0 0 12px; }
 .location-panel.completed { border-top-color: var(--ok); }
 .panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 
-.run-line { margin-bottom: 12px; }
+/* A whole run is one button — the entire block is the hit target, not just a
+   link inside it. Resets the browser's button styling back to a block. */
+.run-line {
+  display: block;
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  text-align: start;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s var(--ease);
+}
+.run-line:hover { background: #fdf2f2; transform: translateX(2px); }
+.run-line:focus-visible { outline: 2px solid var(--sv-ink); outline-offset: 1px; }
 .run-top { display: flex; justify-content: space-between; font-size: 0.88rem; gap: 8px; }
 .run-foot { font-size: 0.72rem; }
 .bar { height: 6px; background: #e9edf3; border-radius: 999px; overflow: hidden; margin: 5px 0 3px; }

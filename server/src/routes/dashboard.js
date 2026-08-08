@@ -151,6 +151,110 @@ router.get(
   })
 );
 
+/**
+ * One run in full: what was checked, what the answer was, when, and by whom —
+ * plus what is still outstanding. This is what the coverage card opens into,
+ * so a manager can see the detail without building a report.
+ *
+ * Mounted under the admin/HOD-only router, so no extra guard is needed.
+ * GET /api/dashboard/runs/:runId
+ */
+router.get(
+  '/runs/:runId',
+  asyncHandler(async (req, res) => {
+    const runId = Number(req.params.runId);
+    if (!Number.isInteger(runId) || runId <= 0) {
+      return res.status(400).json({ error: 'Invalid run id' });
+    }
+
+    const { rows: runs } = await query(
+      `SELECT r.id, r.business_date::text AS business_date, r.status, r.source,
+              r.started_at, r.completed_at,
+              u.full_name, u.username,
+              l.name_en AS location_name_en, l.name_ar AS location_name_ar,
+              st.code AS shift_code, st.name_en AS shift_name_en, st.name_ar AS shift_name_ar
+         FROM checklist_runs r
+         JOIN users u        ON u.id = r.user_id
+         JOIN locations l    ON l.id = r.location_id
+         JOIN shift_types st ON st.id = r.shift_type_id
+        WHERE r.id = $1`,
+      [runId]
+    );
+    if (!runs.length) return res.status(404).json({ error: 'Run not found' });
+    const run = runs[0];
+
+    // Every active task in the location, with this run's answer where one
+    // exists. LEFT JOIN rather than filtering, so the outstanding ones are
+    // visible too — "5 of 39 done" is only useful with the other 34 named.
+    const { rows } = await query(
+      `SELECT t.id AS task_id, t.description_en, t.description_ar, t.is_critical,
+              s.name_en AS sub_location_name_en, s.name_ar AS sub_location_name_ar,
+              COALESCE(s.sort_order, 9999) AS sub_location_sort,
+              t.sort_order,
+              a.answer, a.comment, a.answered_at, a.revision,
+              au.full_name AS answered_by,
+              COALESCE(ph.photos, '[]'::json) AS photos
+         FROM tasks t
+         LEFT JOIN sub_locations s ON s.id = t.sub_location_id AND s.deleted_at IS NULL
+         LEFT JOIN task_answers a  ON a.task_id = t.id AND a.run_id = $1
+         LEFT JOIN users au        ON au.id = a.answered_by
+         LEFT JOIN LATERAL (
+            SELECT json_agg(json_build_object('id', p.id, 'url', '/uploads/' || p.file_path)) AS photos
+              FROM task_photos p WHERE p.answer_id = a.id
+         ) ph ON TRUE
+        WHERE t.location_id = (SELECT location_id FROM checklist_runs WHERE id = $1)
+          AND t.deleted_at IS NULL AND t.is_active
+        ORDER BY a.answered_at DESC NULLS LAST, sub_location_sort, t.sort_order, t.id`,
+      [runId]
+    );
+
+    const tz = await getSetting('timezone', 'Asia/Beirut');
+    const local = (ts) =>
+      ts ? DateTime.fromJSDate(new Date(ts)).setZone(tz).toFormat('HH:mm:ss') : null;
+
+    const tasks = rows.map((r) => ({
+      taskId: r.task_id,
+      descriptionEn: r.description_en,
+      descriptionAr: r.description_ar,
+      subLocationNameEn: r.sub_location_name_en,
+      subLocationNameAr: r.sub_location_name_ar,
+      isCritical: r.is_critical,
+      answered: r.answered_at !== null,
+      answer: r.answer,
+      comment: r.comment,
+      answeredAt: r.answered_at,
+      localTime: local(r.answered_at),
+      answeredBy: r.answered_by,
+      revision: r.revision,
+      photos: r.photos || [],
+    }));
+
+    res.json({
+      run: {
+        id: run.id,
+        businessDate: run.business_date,
+        status: run.status,
+        source: run.source,
+        startedAt: run.started_at,
+        completedAt: run.completed_at,
+        userName: run.full_name,
+        username: run.username,
+        locationNameEn: run.location_name_en,
+        locationNameAr: run.location_name_ar,
+        shiftCode: run.shift_code,
+        shiftNameEn: run.shift_name_en,
+        shiftNameAr: run.shift_name_ar,
+      },
+      tasks,
+      summary: {
+        total: tasks.length,
+        done: tasks.filter((x) => x.answered).length,
+        failed: tasks.filter((x) => x.answer === false).length,
+      },
+    });
+  })
+);
+
 /** Headline numbers for a date range — the cards at the top of the dashboard. */
 router.get(
   '/stats',

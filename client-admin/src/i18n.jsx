@@ -35,6 +35,8 @@ const dict = {
     workingUnscheduled: 'Working without a schedule entry',
     noIssues: 'No issues raised.',
     lastActivity: 'Last activity',
+    viewRunDetail: 'See what was checked, and by whom',
+    done: 'done',
 
     from: 'From',
     to: 'To',
@@ -188,6 +190,8 @@ const dict = {
     workingUnscheduled: 'يعمل بدون جدولة',
     noIssues: 'لا توجد ملاحظات.',
     lastActivity: 'آخر نشاط',
+    viewRunDetail: 'عرض ما تم فحصه ومن قام به',
+    done: 'منجزة',
 
     from: 'من',
     to: 'إلى',

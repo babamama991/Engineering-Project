@@ -81,7 +81,7 @@ export default function Locations() {
                 <th>{t('code')}</th>
                 <th>{t('nameEn')}</th>
                 <th>{t('nameAr')}</th>
-                <th>{t('location')}</th>
+                <th>{t('locationDetail')}</th>
                 <th>{t('tasks')}</th>
                 <th></th>
               </tr>
@@ -149,7 +149,7 @@ export default function Locations() {
             <input value={form.nameAr} onChange={f('nameAr')} dir="rtl" />
           </label>
           <label className="field">
-            <span>{t('location')}</span>
+            <span>{t('locationDetail')}</span>
             <input value={form.location} onChange={f('location')} />
           </label>
           <label className="field">

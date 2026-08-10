@@ -41,16 +41,27 @@ router.get(
     }
     const businessDate = dateParam || clock.businessDate;
 
+    // shiftId=all widens the view to the whole day. Passed to SQL as NULL, so
+    // every "$n IS NULL OR ..." below drops that filter rather than needing a
+    // second copy of each query.
+    const allShifts = req.query.shiftId === 'all';
     const shiftParam = Number(req.query.shiftId);
-    const shiftId = Number.isInteger(shiftParam) && shiftParam > 0 ? shiftParam : clock.shift.id;
+    const shiftId = allShifts
+      ? null
+      : Number.isInteger(shiftParam) && shiftParam > 0
+        ? shiftParam
+        : clock.shift.id;
 
     const [locations, runs, failures, rostered] = await Promise.all([
       query(
         `SELECT id, name_en, name_ar, sort_order,
                 (SELECT count(*)::int FROM tasks t
                   WHERE t.location_id = o.id AND t.deleted_at IS NULL AND t.is_active
-                    -- Only the tasks this shift is asked to do.
-                    AND (t.shift_type_id IS NULL OR t.shift_type_id = $1)) AS total_tasks
+                    -- Only the tasks this shift is asked to do. Across all
+                    -- shifts, every task is in scope.
+                    AND ($1::int IS NULL
+                         OR t.shift_type_id IS NULL
+                         OR t.shift_type_id = $1)) AS total_tasks
            FROM locations o
           WHERE deleted_at IS NULL AND is_active
           ORDER BY sort_order, name_en`,
@@ -65,7 +76,8 @@ router.get(
            FROM checklist_runs r
            JOIN users u ON u.id = r.user_id
            JOIN v_run_progress p ON p.run_id = r.id
-          WHERE r.business_date = $1::date AND r.shift_type_id = $2
+          WHERE r.business_date = $1::date
+            AND ($2::int IS NULL OR r.shift_type_id = $2)
           ORDER BY r.started_at`,
         [businessDate, shiftId]
       ),
@@ -80,7 +92,8 @@ router.get(
         `SELECT sa.user_id, u.full_name, u.username
            FROM shift_assignments sa
            JOIN users u ON u.id = sa.user_id
-          WHERE sa.work_date = $1::date AND sa.shift_type_id = $2
+          WHERE sa.work_date = $1::date
+            AND ($2::int IS NULL OR sa.shift_type_id = $2)
             AND u.deleted_at IS NULL AND u.is_active
           ORDER BY u.full_name`,
         [businessDate, shiftId]
@@ -110,7 +123,9 @@ router.get(
 
     res.json({
       businessDate,
-      shiftId,
+      // 'all' rather than null, so the client can put the selection straight
+      // back into the dropdown without a special case.
+      shiftId: allShifts ? 'all' : shiftId,
       shifts: shifts.map((s) => ({
         id: s.id, code: s.code, nameEn: s.name_en, nameAr: s.name_ar,
         startTime: s.start_time, endTime: s.end_time,
@@ -172,19 +187,31 @@ router.get(
     if (req.query.date && !/^\d{4}-\d{2}-\d{2}$/.test(req.query.date)) {
       return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
     }
-    const shiftIdParam = Number(req.query.shiftId);
-    if (!Number.isInteger(shiftIdParam) || shiftIdParam <= 0) {
+    const allShifts = req.query.shiftId === 'all';
+    const shiftIdParam = allShifts ? null : Number(req.query.shiftId);
+    if (!allShifts && (!Number.isInteger(shiftIdParam) || shiftIdParam <= 0)) {
       return res.status(400).json({ error: 'shiftId is required' });
     }
 
-    const { rows: locs } = await query(
-      `SELECT l.id, l.name_en AS location_name_en, l.name_ar AS location_name_ar,
-              st.code AS shift_code, st.name_en AS shift_name_en, st.name_ar AS shift_name_ar
-         FROM locations l
-         CROSS JOIN shift_types st
-        WHERE l.id = $1 AND st.id = $2 AND l.deleted_at IS NULL`,
-      [locationId, shiftIdParam]
-    );
+    // With no shift chosen there is no single shift row to name, so the header
+    // falls back to a placeholder the client renders as "All shifts".
+    const { rows: locs } = allShifts
+      ? await query(
+          `SELECT l.id, l.name_en AS location_name_en, l.name_ar AS location_name_ar,
+                  NULL::text AS shift_code, NULL::text AS shift_name_en,
+                  NULL::text AS shift_name_ar
+             FROM locations l
+            WHERE l.id = $1 AND l.deleted_at IS NULL`,
+          [locationId]
+        )
+      : await query(
+          `SELECT l.id, l.name_en AS location_name_en, l.name_ar AS location_name_ar,
+                  st.code AS shift_code, st.name_en AS shift_name_en, st.name_ar AS shift_name_ar
+             FROM locations l
+             CROSS JOIN shift_types st
+            WHERE l.id = $1 AND st.id = $2 AND l.deleted_at IS NULL`,
+          [locationId, shiftIdParam]
+        );
     if (!locs.length) return res.status(404).json({ error: 'Location not found' });
     const head = locs[0];
     const businessDate = req.query.date;
@@ -219,14 +246,14 @@ router.get(
               JOIN users u          ON u.id = ta.answered_by
              WHERE r.location_id = $1
                AND r.business_date = $2::date
-               AND r.shift_type_id = $3
+               AND ($3::int IS NULL OR r.shift_type_id = $3)
          ) a ON a.task_id = t.id
          LEFT JOIN LATERAL (
             SELECT json_agg(json_build_object('id', p.id, 'url', '/uploads/' || p.file_path)) AS photos
               FROM task_photos p WHERE p.answer_id = a.id
          ) ph ON TRUE
         WHERE t.location_id = $1 AND t.deleted_at IS NULL AND t.is_active
-          AND (t.shift_type_id IS NULL OR t.shift_type_id = $3)
+          AND ($3::int IS NULL OR t.shift_type_id IS NULL OR t.shift_type_id = $3)
         ORDER BY a.answered_at DESC NULLS LAST, sub_location_sort, t.sort_order, t.id`,
       [locationId, businessDate, shiftIdParam]
     );

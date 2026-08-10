@@ -119,6 +119,7 @@ export default function Dashboard() {
         <div className="filters">
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           <select value={shiftId} onChange={(e) => setShiftId(e.target.value)}>
+            <option value="all">{t('allShifts')}</option>
             {live?.shifts.map((s) => (
               <option key={s.id} value={s.id}>
                 {pick(s, 'name')} ({s.startTime}–{s.endTime})
@@ -375,7 +376,8 @@ export default function Dashboard() {
           ) : (
             <>
               <p className="muted small">
-                {detail.location.businessDate} · {pick(detail.location, 'shiftName')} ·{' '}
+                {detail.location.businessDate} ·{' '}
+                {pick(detail.location, 'shiftName') || t('allShifts')} ·{' '}
                 {detail.summary.done}/{detail.summary.total} {t('done')}
                 {detail.summary.failed > 0 && (
                   <span className="text-danger"> · {detail.summary.failed} {t('no')}</span>

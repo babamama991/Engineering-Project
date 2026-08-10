@@ -11,6 +11,7 @@ const blank = {
   notesEn: '',
   notesAr: '',
   frequency: 'every_shift',
+  shiftTypeId: '', // '' = every shift
   isCritical: false,
   requiresPhoto: false,
 };
@@ -21,6 +22,7 @@ export default function Tasks() {
   const [locations, setOutlets] = useState([]);
   const [locationId, setOutletId] = useState('');
   const [subLocations, setCategories] = useState([]);
+  const [shifts, setShifts] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -36,10 +38,11 @@ export default function Tasks() {
   const [importResult, setImportResult] = useState(null);
 
   useEffect(() => {
-    Promise.all([api.get('/locations'), api.get('/sub-locations')])
-      .then(([o, c]) => {
+    Promise.all([api.get('/locations'), api.get('/sub-locations'), api.get('/shifts')])
+      .then(([o, c, s]) => {
         setOutlets(o.data);
         setCategories(c.data);
+        setShifts(s.data);
         if (o.data.length) setOutletId(String(o.data[0].id));
       })
       .catch((err) => setError(err.userMessage))
@@ -121,6 +124,7 @@ export default function Tasks() {
       notesEn: task.notesEn || '',
       notesAr: task.notesAr || '',
       frequency: task.frequency,
+      shiftTypeId: task.shiftTypeId ?? '',
       isCritical: task.isCritical,
       requiresPhoto: task.requiresPhoto,
     });
@@ -139,6 +143,8 @@ export default function Tasks() {
         notesEn: form.notesEn.trim() || null,
         notesAr: form.notesAr.trim() || null,
         frequency: form.frequency,
+        // '' means every shift, which the API stores as NULL.
+        shiftTypeId: form.shiftTypeId === '' ? null : Number(form.shiftTypeId),
         isCritical: form.isCritical,
         requiresPhoto: form.requiresPhoto,
       };
@@ -345,6 +351,7 @@ export default function Tasks() {
                       {task.frequency !== 'every_shift' && (
                         <span className="tag sm">{t(task.frequency)}</span>
                       )}
+                      {task.shiftCode && <span className="tag warn sm">{task.shiftCode}</span>}
                       {task.requiresPhoto && <span className="tag sm">📷</span>}
                     </div>
                     <div className="muted small rtl-text">{task.descriptionAr}</div>
@@ -433,6 +440,19 @@ export default function Tasks() {
               <option value="daily">{t('daily')}</option>
               <option value="weekly">{t('weekly')}</option>
             </select>
+          </label>
+
+          <label className="field">
+            <span>{t('whichShift')}</span>
+            <select value={form.shiftTypeId} onChange={f('shiftTypeId')}>
+              <option value="">{t('allShiftsOption')}</option>
+              {shifts.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {pick(s, 'name')} ({s.startTime}–{s.endTime})
+                </option>
+              ))}
+            </select>
+            <span className="muted small">{t('shiftHint')}</span>
           </label>
 
           <label className="check">

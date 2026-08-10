@@ -96,6 +96,22 @@ export default function Dashboard() {
     );
   }
 
+  // Everything below reads live.businessDate, live.locations and so on. If the
+  // request failed there is nothing to read, and rendering anyway took the whole
+  // page down with "Cannot read properties of null" — hiding the actual reason
+  // (a 428, a 403, the API being unreachable) behind a blank screen.
+  if (!live) {
+    return (
+      <div className="page-body">
+        <div className="page-head">
+          <h1>{t('dashboard')}</h1>
+        </div>
+        <div className="alert error">{error || t('loadFailed')}</div>
+        <button className="btn ghost" onClick={load}>{t('retry')}</button>
+      </div>
+    );
+  }
+
   return (
     <div className="page-body">
       <div className="page-head">

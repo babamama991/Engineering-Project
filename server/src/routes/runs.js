@@ -107,8 +107,11 @@ async function loadChecklist(run) {
      ) ph ON TRUE
 
     WHERE t.location_id = $2 AND t.deleted_at IS NULL AND t.is_active
+      -- A task pinned to a shift only appears on that shift's checklist;
+      -- NULL means every shift, which is what most tasks are.
+      AND (t.shift_type_id IS NULL OR t.shift_type_id = $6)
     ORDER BY sub_location_sort, c.name_en NULLS LAST, t.sort_order, t.id`,
-    [run.id, run.location_id, run.business_date, weekStart, weekEnd]
+    [run.id, run.location_id, run.business_date, weekStart, weekEnd, run.shift_type_id]
   );
 
   // Group into the collapsible sections the phone UI renders.
@@ -254,7 +257,8 @@ router.get(
       `SELECT o.id AS location_id,
               COALESCE(p.total_tasks, (
                 SELECT count(*)::int FROM tasks t
-                 WHERE t.location_id = o.id AND t.deleted_at IS NULL AND t.is_active)) AS total,
+                 WHERE t.location_id = o.id AND t.deleted_at IS NULL AND t.is_active
+                   AND (t.shift_type_id IS NULL OR t.shift_type_id = $3))) AS total,
               COALESCE(p.answered_tasks, 0) AS answered,
               COALESCE(p.failed_tasks, 0)   AS failed,
               r.status

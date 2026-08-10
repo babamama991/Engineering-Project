@@ -48,10 +48,13 @@ router.get(
       query(
         `SELECT id, name_en, name_ar, sort_order,
                 (SELECT count(*)::int FROM tasks t
-                  WHERE t.location_id = o.id AND t.deleted_at IS NULL AND t.is_active) AS total_tasks
+                  WHERE t.location_id = o.id AND t.deleted_at IS NULL AND t.is_active
+                    -- Only the tasks this shift is asked to do.
+                    AND (t.shift_type_id IS NULL OR t.shift_type_id = $1)) AS total_tasks
            FROM locations o
           WHERE deleted_at IS NULL AND is_active
-          ORDER BY sort_order, name_en`
+          ORDER BY sort_order, name_en`,
+        [shiftId]
       ),
       query(
         `SELECT r.id, r.location_id, r.user_id, r.status, r.source,
@@ -223,6 +226,7 @@ router.get(
               FROM task_photos p WHERE p.answer_id = a.id
          ) ph ON TRUE
         WHERE t.location_id = $1 AND t.deleted_at IS NULL AND t.is_active
+          AND (t.shift_type_id IS NULL OR t.shift_type_id = $3)
         ORDER BY a.answered_at DESC NULLS LAST, sub_location_sort, t.sort_order, t.id`,
       [locationId, businessDate, shiftIdParam]
     );

@@ -17,6 +17,8 @@ const shape = (t) => ({
   subLocationNameEn: t.sub_location_name_en ?? null,
   subLocationNameAr: t.sub_location_name_ar ?? null,
   subLocationIcon: t.category_icon ?? null,
+  shiftTypeId: t.shift_type_id, // null = every shift
+  shiftCode: t.shift_code ?? null,
   descriptionEn: t.description_en,
   descriptionAr: t.description_ar,
   notesEn: t.notes_en,
@@ -37,9 +39,11 @@ router.get(
 
     const { rows } = await query(
       `SELECT t.*, c.name_en AS sub_location_name_en, c.name_ar AS sub_location_name_ar,
-              c.icon AS category_icon, c.sort_order AS sub_location_sort
+              c.icon AS category_icon, c.sort_order AS sub_location_sort,
+              st.code AS shift_code
          FROM tasks t
          LEFT JOIN sub_locations c ON c.id = t.sub_location_id
+         LEFT JOIN shift_types st  ON st.id = t.shift_type_id
         WHERE t.deleted_at IS NULL
           ${includeInactive ? '' : 'AND t.is_active'}
           AND ($1::int IS NULL OR t.location_id = $1)
@@ -229,6 +233,8 @@ const schema = z.object({
   notesEn: z.string().trim().nullable().optional(),
   notesAr: z.string().trim().nullable().optional(),
   frequency: z.enum(['every_shift', 'daily', 'weekly']).default('every_shift'),
+  // null = appears on every shift's checklist.
+  shiftTypeId: z.number().int().positive().nullable().optional(),
   requiresPhoto: z.boolean().default(false),
   isCritical: z.boolean().default(false),
   sortOrder: z.number().int().default(0),
@@ -242,11 +248,11 @@ router.post(
     const d = schema.parse(req.body);
     const { rows } = await query(
       `INSERT INTO tasks (location_id, sub_location_id, description_en, description_ar, notes_en,
-                          notes_ar, frequency, requires_photo, is_critical,
+                          notes_ar, frequency, shift_type_id, requires_photo, is_critical,
                           sort_order, is_active, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
       [d.locationId, d.subLocationId ?? null, d.descriptionEn, d.descriptionAr, d.notesEn || null,
-       d.notesAr || null, d.frequency, d.requiresPhoto, d.isCritical,
+       d.notesAr || null, d.frequency, d.shiftTypeId ?? null, d.requiresPhoto, d.isCritical,
        d.sortOrder, d.isActive, req.user.id]
     );
     logAction(req, { action: 'task.create', entity: 'task', entityId: rows[0].id, details: d });
@@ -332,11 +338,16 @@ router.patch(
          requires_photo  = COALESCE($9, requires_photo),
          is_critical     = COALESCE($10, is_critical),
          sort_order      = COALESCE($11, sort_order),
-         is_active       = COALESCE($12, is_active)
+         is_active       = COALESCE($12, is_active),
+         -- COALESCE can't express "clear this": null would mean "leave it".
+         -- $13 says whether the field was sent at all, so switching a task back
+         -- to every-shift actually sticks.
+         shift_type_id   = CASE WHEN $13 THEN $14 ELSE shift_type_id END
        WHERE id = $1 AND deleted_at IS NULL RETURNING *`,
       [Number(req.params.id), d.locationId ?? null, d.subLocationId ?? null, d.descriptionEn ?? null,
        d.descriptionAr ?? null, d.notesEn ?? null, d.notesAr ?? null, d.frequency ?? null,
-       d.requiresPhoto ?? null, d.isCritical ?? null, d.sortOrder ?? null, d.isActive ?? null]
+       d.requiresPhoto ?? null, d.isCritical ?? null, d.sortOrder ?? null, d.isActive ?? null,
+       Object.prototype.hasOwnProperty.call(d, 'shiftTypeId'), d.shiftTypeId ?? null]
     );
     if (!rows.length) return res.status(404).json({ error: 'Task not found' });
     logAction(req, { action: 'task.update', entity: 'task', entityId: rows[0].id, details: d });

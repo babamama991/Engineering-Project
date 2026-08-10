@@ -199,23 +199,25 @@ router.get(
               s.name_en AS sub_location_name_en, s.name_ar AS sub_location_name_ar,
               COALESCE(s.sort_order, 9999) AS sub_location_sort,
               t.sort_order,
+              a.id AS answer_id,
               a.answer, a.comment, a.answered_at, a.revision, a.answered_by_name,
               COALESCE(ph.photos, '[]'::json) AS photos
          FROM tasks t
          LEFT JOIN sub_locations s ON s.id = t.sub_location_id AND s.deleted_at IS NULL
-         LEFT JOIN LATERAL (
-            SELECT ta.id, ta.answer, ta.comment, ta.answered_at, ta.revision,
-                   u.full_name AS answered_by_name
+         -- A plain LEFT JOIN, deliberately not "most recent per task": when two
+         -- technicians both check the same task, both answers are real work and
+         -- both belong on screen. One row per answer, and a single NULL row for
+         -- a task nobody has reached yet.
+         LEFT JOIN (
+            SELECT ta.id, ta.task_id, ta.answer, ta.comment, ta.answered_at,
+                   ta.revision, u.full_name AS answered_by_name
               FROM task_answers ta
               JOIN checklist_runs r ON r.id = ta.run_id
               JOIN users u          ON u.id = ta.answered_by
-             WHERE ta.task_id = t.id
-               AND r.location_id = $1
+             WHERE r.location_id = $1
                AND r.business_date = $2::date
                AND r.shift_type_id = $3
-             ORDER BY ta.answered_at DESC
-             LIMIT 1
-         ) a ON TRUE
+         ) a ON a.task_id = t.id
          LEFT JOIN LATERAL (
             SELECT json_agg(json_build_object('id', p.id, 'url', '/uploads/' || p.file_path)) AS photos
               FROM task_photos p WHERE p.answer_id = a.id
@@ -241,6 +243,7 @@ router.get(
       comment: r.comment,
       answeredAt: r.answered_at,
       localTime: local(r.answered_at),
+      answerId: r.answer_id, // null when nobody has reached this task yet
       answeredBy: r.answered_by_name,
       revision: r.revision,
       photos: r.photos || [],
@@ -263,8 +266,12 @@ router.get(
       },
       tasks,
       summary: {
-        total: tasks.length,
-        done: tasks.filter((x) => x.answered).length,
+        // Counted over distinct tasks, not rows — a task checked by two people
+        // produces two rows but is still one task out of the location's total.
+        total: new Set(tasks.map((x) => x.taskId)).size,
+        done: new Set(tasks.filter((x) => x.answered).map((x) => x.taskId)).size,
+        // Failures count every failing answer: two people reporting the same
+        // fault is two reports, and hiding one would understate the problem.
         failed: tasks.filter((x) => x.answer === false).length,
       },
     });

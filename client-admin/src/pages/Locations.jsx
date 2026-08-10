@@ -4,7 +4,7 @@ import { useLang } from '../i18n.jsx';
 import Modal from '../components/Modal.jsx';
 import Spinner from '../components/Spinner.jsx';
 
-const blank = { code: '', nameEn: '', nameAr: '', location: '', sortOrder: 0, isActive: true };
+const blank = { nameEn: '', nameAr: '', location: '', sortOrder: 0, isActive: true };
 
 export default function Locations() {
   const { t, pick } = useLang();
@@ -78,7 +78,6 @@ export default function Locations() {
             <thead>
               <tr>
                 <th>{t('order')}</th>
-                <th>{t('code')}</th>
                 <th>{t('nameEn')}</th>
                 <th>{t('nameAr')}</th>
                 <th>{t('locationDetail')}</th>
@@ -90,7 +89,6 @@ export default function Locations() {
               {rows.map((o) => (
                 <tr key={o.id} className={o.isActive ? '' : 'row-muted'}>
                   <td className="mono">{o.sortOrder}</td>
-                  <td className="mono">{o.code}</td>
                   <td>{o.nameEn}</td>
                   <td className="rtl-text">{o.nameAr}</td>
                   <td>{o.location || '—'}</td>
@@ -100,7 +98,7 @@ export default function Locations() {
                       className="btn ghost sm"
                       onClick={() => {
                         setForm({
-                          code: o.code, nameEn: o.nameEn, nameAr: o.nameAr,
+                          nameEn: o.nameEn, nameAr: o.nameAr,
                           location: o.location || '', sortOrder: o.sortOrder, isActive: o.isActive,
                         });
                         setEditing(o);
@@ -129,17 +127,13 @@ export default function Locations() {
               <button
                 className="btn primary"
                 onClick={save}
-                disabled={saving || !form.code.trim() || !form.nameEn.trim() || !form.nameAr.trim()}
+                disabled={saving || !form.nameEn.trim()}
               >
                 {saving ? <Spinner small /> : t('save')}
               </button>
             </>
           }
         >
-          <label className="field">
-            <span>{t('code')}</span>
-            <input value={form.code} onChange={f('code')} placeholder="PENTHOUSE" />
-          </label>
           <label className="field">
             <span>{t('nameEn')}</span>
             <input value={form.nameEn} onChange={f('nameEn')} />

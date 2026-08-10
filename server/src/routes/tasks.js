@@ -65,10 +65,6 @@ const upload = multer({
   },
 });
 
-/** Stable short code for an location, derived from its name. 'Red Street' -> 'RED_STREET'. */
-const outletCode = (name) =>
-  name.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40) || 'LOCATION';
-
 /**
  * Import a checklist spreadsheet.
  *
@@ -132,22 +128,10 @@ router.post(
         }
 
         const t = splitTitle(name);
-        // locations.code is unique among live rows; suffix on collision rather
-        // than failing the whole import over a name clash.
-        let code = outletCode(name);
-        for (let i = 2; ; i++) {
-          const clash = await client.query(
-            'SELECT 1 FROM locations WHERE code = $1 AND deleted_at IS NULL',
-            [code]
-          );
-          if (!clash.rows.length) break;
-          code = `${outletCode(name)}_${i}`.slice(0, 40);
-        }
-
         const ins = await client.query(
-          `INSERT INTO locations (code, name_en, name_ar, sort_order)
-           VALUES ($1,$2,$3,$4) RETURNING id`,
-          [code, t.en, t.ar, locationIds.size + 1]
+          `INSERT INTO locations (name_en, name_ar, sort_order)
+           VALUES ($1,$2,$3) RETURNING id`,
+          [t.en, t.ar, locationIds.size + 1]
         );
         locationIds.set(name, ins.rows[0].id);
         outletsCreated.push(t.en);

@@ -57,13 +57,12 @@ CREATE UNIQUE INDEX users_username_live_uidx
 CREATE INDEX users_role_idx ON users (role) WHERE deleted_at IS NULL;
 
 -- ---------------------------------------------------------------------------
--- 2. OUTLETS  (Penthouse, Poolhouse, Dasophia, Marvelous, ...)
+-- 2. LOCATIONS  (the Excel "Location" column — GF, 1F, ...)
 -- ---------------------------------------------------------------------------
 CREATE TABLE locations (
     id          SERIAL PRIMARY KEY,
-    code        TEXT        NOT NULL,          -- short stable key, e.g. 'PENTHOUSE'
     name_en     TEXT        NOT NULL,
-    name_ar     TEXT        NOT NULL,
+    name_ar     TEXT,                          -- optional; falls back to English
     location    TEXT,                          -- free text: "Roof, 12th floor"
     sort_order  INTEGER     NOT NULL DEFAULT 0,
     is_active   BOOLEAN     NOT NULL DEFAULT TRUE,
@@ -71,9 +70,6 @@ CREATE TABLE locations (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at  TIMESTAMPTZ
 );
-
-CREATE UNIQUE INDEX outlets_code_live_uidx
-    ON locations (code) WHERE deleted_at IS NULL;
 
 -- ---------------------------------------------------------------------------
 -- 3. TASK CATEGORIES  (global & reusable: Electrical, Plumbing, HVAC, Safety…)

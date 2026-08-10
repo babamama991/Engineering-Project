@@ -386,7 +386,9 @@ export default function Dashboard() {
                         the server orders it that way. */}
                     {detail.tasks.map((task) => (
                       <tr
-                        key={task.taskId}
+                        // A task checked by two people appears twice, so the
+                        // answer is what makes the row unique.
+                        key={task.answerId ?? `task-${task.taskId}`}
                         className={
                           !task.answered ? 'row-muted' : task.answer ? '' : 'row-fail'
                         }

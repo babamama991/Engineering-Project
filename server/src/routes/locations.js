@@ -9,7 +9,6 @@ const router = Router();
 
 const shape = (o) => ({
   id: o.id,
-  code: o.code,
   nameEn: o.name_en,
   nameAr: o.name_ar,
   location: o.location,
@@ -36,7 +35,6 @@ router.get(
 );
 
 const upsertSchema = z.object({
-  code: z.string().trim().min(2).regex(/^[A-Za-z0-9_-]+$/, 'Letters, numbers, dash, underscore'),
   nameEn: z.string().trim().min(1),
   // Optional — see tasks.descriptionAr. Arabic can be filled in later.
   nameAr: z.string().trim().min(1).nullable().optional(),
@@ -51,9 +49,9 @@ router.post(
   asyncHandler(async (req, res) => {
     const d = upsertSchema.parse(req.body);
     const { rows } = await query(
-      `INSERT INTO locations (code, name_en, name_ar, location, sort_order, is_active)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [d.code.toUpperCase(), d.nameEn, d.nameAr, d.location || null, d.sortOrder, d.isActive]
+      `INSERT INTO locations (name_en, name_ar, location, sort_order, is_active)
+       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [d.nameEn, d.nameAr, d.location || null, d.sortOrder, d.isActive]
     );
     logAction(req, { action: 'location.create', entity: 'location', entityId: rows[0].id, details: d });
     res.status(201).json(shape(rows[0]));
@@ -67,14 +65,13 @@ router.patch(
     const d = upsertSchema.partial().parse(req.body);
     const { rows } = await query(
       `UPDATE locations SET
-         code       = COALESCE($2, code),
-         name_en    = COALESCE($3, name_en),
-         name_ar    = COALESCE($4, name_ar),
-         location   = COALESCE($5, location),
-         sort_order = COALESCE($6, sort_order),
-         is_active  = COALESCE($7, is_active)
+         name_en    = COALESCE($2, name_en),
+         name_ar    = COALESCE($3, name_ar),
+         location   = COALESCE($4, location),
+         sort_order = COALESCE($5, sort_order),
+         is_active  = COALESCE($6, is_active)
        WHERE id = $1 AND deleted_at IS NULL RETURNING *`,
-      [Number(req.params.id), d.code?.toUpperCase() ?? null, d.nameEn ?? null, d.nameAr ?? null,
+      [Number(req.params.id), d.nameEn ?? null, d.nameAr ?? null,
        d.location ?? null, d.sortOrder ?? null, d.isActive ?? null]
     );
     if (!rows.length) return res.status(404).json({ error: 'Location not found' });

@@ -7,7 +7,7 @@ import sharp from 'sharp';
 import { z } from 'zod';
 
 import { config } from '../config.js';
-import { query } from '../db.js';
+import { query, withTransaction } from '../db.js';
 import { asyncHandler } from '../middleware/error.js';
 import { resolveUserShift, isoWeekBounds } from '../utils/shifts.js';
 import { getSetting } from '../utils/settings.js';
@@ -350,16 +350,57 @@ router.put(
   })
 );
 
-/** Clears an answer — the task goes back to unticked. */
+/**
+ * Clears an answer — the task goes back to unticked.
+ *
+ * The delete is logged before it happens, because the trigger on task_answers
+ * only fires for INSERT and UPDATE. Without this, clearing a "No" erased both
+ * the answer and the reason with nothing left to show it ever existed.
+ *
+ * A cleared answer also means the round is no longer finished, so a completed
+ * run goes back to in_progress. Otherwise the dashboard keeps reporting
+ * "Completed" for a checklist that now has a gap in it.
+ */
 router.delete(
   '/:runId/answers/:taskId',
   asyncHandler(async (req, res) => {
     const run = await loadOwnedRun(Number(req.params.runId), req.user);
     await assertWritable(run);
-    await query('DELETE FROM task_answers WHERE run_id = $1 AND task_id = $2', [
-      run.id, Number(req.params.taskId),
-    ]);
-    res.json({ ok: true });
+    const taskId = Number(req.params.taskId);
+
+    const result = await withTransaction(async (client) => {
+      const { rows } = await client.query(
+        'SELECT * FROM task_answers WHERE run_id = $1 AND task_id = $2',
+        [run.id, taskId]
+      );
+      if (!rows.length) return { cleared: false, reopened: false };
+      const answer = rows[0];
+
+      // new_answer NULL is what marks this as a clear rather than an edit.
+      await client.query(
+        `INSERT INTO task_answer_history
+            (answer_id, run_id, task_id, old_answer, new_answer,
+             old_comment, new_comment, revision, changed_by, changed_at)
+         VALUES ($1,$2,$3,$4,NULL,$5,NULL,$6,$7, now())`,
+        [answer.id, run.id, taskId, answer.answer, answer.comment,
+         answer.revision, req.user.id]
+      );
+
+      await client.query('DELETE FROM task_answers WHERE id = $1', [answer.id]);
+
+      let reopened = false;
+      if (run.status === 'completed') {
+        await client.query(
+          `UPDATE checklist_runs SET status = 'in_progress', completed_at = NULL
+            WHERE id = $1`,
+          [run.id]
+        );
+        reopened = true;
+      }
+      return { cleared: true, reopened };
+    });
+
+    res.json({ ok: true, ...result });
   })
 );
 

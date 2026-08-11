@@ -455,8 +455,15 @@ h3 { font-size: 1rem; margin: 0 0 12px; }
   text-align: center;
   cursor: pointer;
 }
+/* Schedule cells are ~74px wide — no room for a chevron, and the cell colour
+   already signals it's a picker. */
+.shift-select {
+  background-image: none;
+  padding-inline-end: 6px;
+  text-align: center;
+}
 .shift-select.s-off { color: var(--muted); background: #fafbfd; }
-.shift-select:not(.s-off) { background: #e8f0fb; border-color: #bcd3ee; font-weight: 600; }
+.shift-select:not(.s-off) { background: #fff3d6; border-color: #e6cf94; font-weight: 600; }
 
 /* --- forms ---------------------------------------------------------------- */
 .field { display: block; margin-bottom: 12px; }
@@ -482,6 +489,71 @@ h3 { font-size: 1rem; margin: 0 0 12px; }
   border-radius: 9px;
   padding: 8px 10px;
   background: #fff;
+}
+
+/* --- selects -------------------------------------------------------------- */
+/* The native control is replaced with our own chevron so it matches the rest of
+   the panel. The OPEN list is drawn by the operating system and can't be styled
+   in most browsers — the @supports block below handles the ones that can. */
+/* Listed with the class selectors too: `.field select` sets its own padding,
+   and a bare element selector loses to it — which would let a long option run
+   underneath the chevron. */
+select, .field select, .filters select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%2354595f' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' d='M1 1.5 6 6.5 11 1.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  /* Room for the chevron so a long option never runs underneath it. */
+  padding-inline-end: 30px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+[dir='rtl'] select {
+  background-position: left 11px center;
+  padding-inline-end: 11px;
+  padding-inline-start: 30px;
+}
+select:hover:not(:disabled) { border-color: var(--sv-gray-light); }
+select:disabled { opacity: 0.6; cursor: not-allowed; background-image: none; }
+
+/* Chrome 135+ can style the popup itself. Everything else keeps the OS list,
+   which is why this is an enhancement rather than the main styling. */
+@supports (appearance: base-select) {
+  /* Must match the specificity of the fallback rule above, or `appearance: none`
+     wins and this whole block does nothing. */
+  select, .field select, .filters select, ::picker(select) {
+    appearance: base-select;
+  }
+  /* The browser draws its own picker icon here, so drop ours. */
+  select, .field select, .filters select {
+    background-image: none;
+    padding-inline-end: 11px;
+  }
+
+  ::picker(select) {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    box-shadow: 0 16px 40px rgba(19, 19, 22, 0.18);
+    padding: 6px;
+    margin-block-start: 6px;
+  }
+  option {
+    padding: 9px 12px;
+    border-radius: 8px;
+    font: inherit;
+    cursor: pointer;
+  }
+  option:hover, option:focus { background: #fdf2f2; }
+  option:checked {
+    background: rgba(235, 29, 37, 0.12);
+    font-weight: 600;
+  }
+  option::checkmark { display: none; } /* the highlight already says which */
+
+  select::picker-icon { transition: transform 0.2s var(--ease); }
+  select:open::picker-icon { transform: rotate(180deg); }
 }
 
 .filter-panel { padding-bottom: 12px; }
